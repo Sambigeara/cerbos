@@ -124,11 +124,9 @@ func testPutCmd(clientCtx *cmdclient.Context, globals *flagset.Globals) func(*te
 					"resource.purchase_order.vdefault",
 					"resource.runtime_effective_derived_roles.vdefault",
 					"resource.variables_referencing_variables.vdefault",
-					"role.acme_assistant/acme.hr.uk",
 					"role.acme_creator/acme.hr.uk.brighton",
 					"role.acme_jr_admin/acme.hr.uk.brighton",
 					"role.acme_london_employee/acme.hr.uk.london",
-					"role.acme_travel_agent/acme.hr.uk",
 				}, listPolicies(t, clientCtx))
 			})
 

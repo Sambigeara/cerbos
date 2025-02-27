@@ -108,7 +108,7 @@ func compileRolePolicySet(modCtx *moduleCtx) *runtimev1.RunnablePolicySet {
 				ParentRoles:      rp.ParentRoles,
 				Scope:            rp.Scope,
 				Resources:        resources,
-				ScopePermissions: rp.ScopePermissions,
+				ScopePermissions: policyv1.ScopePermissions_SCOPE_PERMISSIONS_REQUIRE_PARENTAL_CONSENT_FOR_ALLOWS,
 			},
 		},
 	}

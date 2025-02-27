@@ -263,13 +263,19 @@ func (idx *indexBuilder) addScopeNode(scope string, permission policyv1.ScopePer
 
 	parts := strings.Split(scope, ".")
 	node := idx.scopeTree
+	aggregatedScope := ""
 	for _, part := range parts {
+		if aggregatedScope == "" {
+			aggregatedScope = part
+		} else {
+			aggregatedScope = aggregatedScope + "." + part
+		}
 		if node.children == nil {
 			node.children = make(map[string]*scopeNode)
 		}
 		child, ok := node.children[part]
 		if !ok {
-			child = &scopeNode{scope: part}
+			child = &scopeNode{scope: aggregatedScope}
 			node.children[part] = child
 		}
 		node = child
@@ -328,7 +334,7 @@ func (idx *indexBuilder) addPolicy(file string, srcCtx parser.SourceCtx, p polic
 		idx.executables[p.ID] = struct{}{}
 
 	case policy.RolePolicyKind:
-		scopePermission = p.GetRolePolicy().ScopePermissions
+		scopePermission = policyv1.ScopePermissions_SCOPE_PERMISSIONS_REQUIRE_PARENTAL_CONSENT_FOR_ALLOWS
 		idx.executables[p.ID] = struct{}{}
 
 		rp := p.GetRolePolicy()

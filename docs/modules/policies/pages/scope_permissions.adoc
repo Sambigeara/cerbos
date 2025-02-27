@@ -17,8 +17,6 @@ There are two available settings:
 
 NOTE: By default, resource and principal policies use `SCOPE_PERMISSIONS_OVERRIDE_PARENT` unless explicitly set otherwise.
 
-IMPORTANT: Role policies require this field to be specified explicitly.
-
 == Scope permissions
 === SCOPE_PERMISSIONS_OVERRIDE_PARENT
 
@@ -52,15 +50,10 @@ In contrast, resource and principal policies with `SCOPE_PERMISSIONS_OVERRIDE_PA
 
 === Role Policies
 
-Role policies function differently because they do not use explicit `ALLOW` or `DENY` effects. Instead, they define a set of allowable actions, which default to `ALLOW`.
+NOTE: Role policies currently only support `SCOPE_PERMISSIONS_REQUIRE_PARENTAL_CONSENT_FOR_ALLOWS`. They default to this setting if not explicitly set.
 
-For role policies with `SCOPE_PERMISSIONS_REQUIRE_PARENTAL_CONSENT_FOR_ALLOWS`:
+Role policies function differently because they do not use explicit `ALLOW` or `DENY` effects. Instead, they define a set of allowable actions, which default to `ALLOW`.
 
 - If a matching resource-action pair is found and the condition is met, evaluation continues up in the parent scopes.
 - If a matching resource-action pair is found but the condition is not met, or if a resource-action pair is not defined, an implicit DENY is issued for the named role.
 - Other roles are evaluated independently. If one role allows an action while another denies it, the `ALLOW` takes precedence for that action.
-
-For role policies with `SCOPE_PERMISSIONS_OVERRIDE_PARENT`:
-
-- If a matching resource-action pair is found and the condition is met, an ALLOW is immediately issued.
-- If a matching resource-action pair is found but the condition is not met, or if a resource-action pair is not defined, evaluation continues up the hierarchy.

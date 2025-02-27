@@ -1,20 +1,18 @@
 # yaml-language-server: $schema=../.jsonschema/EngineTestCase.schema.json
 ---
-description: "Interleaved resource and role policies with parent roles and OVERRIDE_PARENT"
+description: "Resource policies with OVERRIDE_PARENT"
 inputs:
   [
     {
       "requestId": "test",
       "actions": [
-        "assist", # allowed in named role
-        "suggest", # allowed in `acme_travel_agent` parent role
-        "redirect", # allowed in `employee` base level role, which is a parent role of `acme_travel_agent` (so 2 levels of recursion)
+        "redirect",
         "view:public", # allowed in `any_employee` derived role which has the `employee` parent role
       ],
       "principal":
         {
           "id": "john",
-          "roles": ["acme_assistant"],
+          "roles": ["employee"],
         },
       "resource":
         {
@@ -31,18 +29,6 @@ wantOutputs:
       "resourceId": "XX125",
       "actions":
         {
-          "assist":
-            {
-              "effect": "EFFECT_ALLOW",
-              "policy": "resource.leave_request.vdefault/acme.hr.uk",
-              "scope": "acme.hr.uk",
-            },
-          "suggest":
-            {
-              "effect": "EFFECT_ALLOW",
-              "policy": "resource.leave_request.vdefault/acme.hr.uk",
-              "scope": "acme.hr.uk",
-            },
           "redirect":
             {
               "effect": "EFFECT_ALLOW",
@@ -79,9 +65,9 @@ wantDecisionLogs:
                 "principal":
                   {
                     "id": "john",
-                    "roles": ["acme_assistant"],
+                    "roles": ["employee"],
                   },
-                "actions": ["assist", "suggest", "redirect", "view:public"],
+                "actions": ["redirect", "view:public"],
               },
             ],
           "outputs":
@@ -91,18 +77,6 @@ wantDecisionLogs:
                 "resourceId": "XX125",
                 "actions":
                   {
-                    "assist":
-                      {
-                        "effect": "EFFECT_ALLOW",
-                        "policy": "resource.leave_request.vdefault/acme.hr.uk",
-                        "scope": "acme.hr.uk",
-                      },
-                    "suggest":
-                      {
-                        "effect": "EFFECT_ALLOW",
-                        "policy": "resource.leave_request.vdefault/acme.hr.uk",
-                        "scope": "acme.hr.uk",
-                      },
                     "redirect":
                       {
                         "effect": "EFFECT_ALLOW",
@@ -146,22 +120,6 @@ wantDecisionLogs:
                     {
                       "driver": "disk",
                       "source": "resource_policies/policy_05_acme.hr.yaml",
-                    },
-                },
-              "role.acme_assistant/acme.hr.uk":
-                {
-                  "attributes":
-                    {
-                      "driver": "disk",
-                      "source": "role_policies/policy_03_override_acme.hr.uk.yaml",
-                    },
-                },
-              "role.acme_travel_agent/acme.hr.uk":
-                {
-                  "attributes":
-                    {
-                      "driver": "disk",
-                      "source": "role_policies/policy_04_override_acme.hr.uk.yaml",
                     },
                 },
             },
