@@ -36,22 +36,18 @@ var errNoPoliciesMatched = errors.New("no matching policies")
 
 type RuleTable struct {
 	*runtimev1.RuleTable
-	log          *zap.SugaredLogger
-	policyLoader policyloader.PolicyLoader
-	// version -> scope -> role -> action -> []rows
-	primaryIdx         map[string]map[string]*util.GlobMap[*util.GlobMap[[]*Row]]
-	policyDerivedRoles map[namer.ModuleID]map[string]*WrappedRunnableDerivedRole
-	// reverse mapping of derived role mod IDs to the resource policies it's referenced in
-	derivedRolePolicies   map[namer.ModuleID]map[namer.ModuleID]struct{}
-	storeQueryRegister    map[namer.ModuleID]bool
-	principalScopeMap     map[string]struct{}
-	resourceScopeMap      map[string]struct{}
-	scopeScopePermissions map[string]policyv1.ScopePermissions
-	// role policies are per-scope, so the maps takes the form `map[scope]map[role][]roles`
-	parentRoles              map[string]map[string][]string
-	parentRoleAncestorsCache map[string]map[string][]string
-	awaitingHealthyIndex     atomic.Bool
-	mu                       sync.RWMutex
+	log                      *zap.SugaredLogger
+	policyLoader             policyloader.PolicyLoader                                  // TODO(saml) not required in static
+	primaryIdx               map[string]map[string]*util.GlobMap[*util.GlobMap[[]*Row]] // TODO(saml) POST
+	derivedRolePolicies      map[namer.ModuleID]map[namer.ModuleID]struct{}             // TODO(saml) not required in static
+	storeQueryRegister       map[namer.ModuleID]bool                                    // TODO(saml) not required in static
+	principalScopeMap        map[string]struct{}                                        // TODO(saml) POST
+	resourceScopeMap         map[string]struct{}                                        // TODO(saml) POST
+	scopeScopePermissions    map[string]policyv1.ScopePermissions                       // TODO(saml) POST
+	parentRoleAncestorsCache map[string]map[string][]string                             // TODO(saml) POST
+	awaitingHealthyIndex     atomic.Bool                                                // TODO(saml) not required in static
+	mu                       sync.RWMutex                                               // TODO(saml) not required in static
+	policyDerivedRoles       map[namer.ModuleID]map[string]*WrappedRunnableDerivedRole  // TODO(saml) PRE + POST(? for WrappedRunnableDerivedRole)
 }
 
 type WrappedRunnableDerivedRole struct {
@@ -120,12 +116,12 @@ func NewRuleTable(policyLoader policyloader.PolicyLoader) *RuleTable {
 		principalScopeMap:        make(map[string]struct{}),
 		resourceScopeMap:         make(map[string]struct{}),
 		scopeScopePermissions:    make(map[string]policyv1.ScopePermissions),
-		parentRoles:              make(map[string]map[string][]string),
 		parentRoleAncestorsCache: make(map[string]map[string][]string),
 		awaitingHealthyIndex:     atomic.Bool{},
 		RuleTable: &runtimev1.RuleTable{
-			Schemas: make(map[uint64]*policyv1.Schemas),
-			Meta:    make(map[uint64]*runtimev1.RuleTableMetadata),
+			Schemas:          make(map[uint64]*policyv1.Schemas),
+			Meta:             make(map[uint64]*runtimev1.RuleTableMetadata),
+			ScopeParentRoles: make(map[string]*runtimev1.RuleTable_RoleParentRoles),
 		},
 	}
 }
@@ -801,11 +797,15 @@ func (rt *RuleTable) addRolePolicy(p *runtimev1.RunnableRolePolicySet) {
 		}
 	}
 
-	if _, ok := rt.parentRoles[p.Scope]; !ok {
-		rt.parentRoles[p.Scope] = make(map[string][]string)
+	if _, ok := rt.ScopeParentRoles[p.Scope]; !ok {
+		rt.ScopeParentRoles[p.Scope] = &runtimev1.RuleTable_RoleParentRoles{
+			RoleParentRoles: make(map[string]*runtimev1.RuleTable_RoleParentRoles_ParentRoles),
+		}
 	}
 
-	rt.parentRoles[p.Scope][p.Role] = p.ParentRoles
+	rt.ScopeParentRoles[p.Scope].RoleParentRoles[p.Role] = &runtimev1.RuleTable_RoleParentRoles_ParentRoles{
+		Roles: p.ParentRoles,
+	}
 }
 
 func (rt *RuleTable) insertRule(r *Row) {
@@ -863,7 +863,7 @@ func (rt *RuleTable) deletePolicy(moduleID namer.ModuleID) {
 	for version, scopeMap := range rt.primaryIdx {
 		for scope, roleMap := range scopeMap {
 			scopedParentRoleAncestors := rt.parentRoleAncestorsCache[scope]
-			scopedParentRoles := rt.parentRoles[scope]
+			scopedParentRoles := rt.ScopeParentRoles[scope]
 
 			for role, actionMap := range roleMap.GetAll() {
 				for action, rules := range actionMap.GetAll() {
@@ -886,7 +886,7 @@ func (rt *RuleTable) deletePolicy(moduleID namer.ModuleID) {
 				if actionMap.Len() == 0 {
 					roleMap.DeleteLiteral(role)
 					delete(scopedParentRoleAncestors, role)
-					delete(scopedParentRoles, role)
+					delete(scopedParentRoles.GetRoleParentRoles(), role)
 				}
 			}
 
@@ -896,7 +896,7 @@ func (rt *RuleTable) deletePolicy(moduleID namer.ModuleID) {
 				delete(rt.resourceScopeMap, scope)
 				delete(rt.scopeScopePermissions, scope)
 				delete(rt.parentRoleAncestorsCache, scope)
-				delete(rt.parentRoles, scope)
+				delete(rt.ScopeParentRoles, scope)
 			}
 		}
 
@@ -923,7 +923,7 @@ func (rt *RuleTable) purge() {
 
 	clear(rt.Meta)
 	clear(rt.parentRoleAncestorsCache)
-	clear(rt.parentRoles)
+	clear(rt.ScopeParentRoles)
 	clear(rt.policyDerivedRoles)
 	clear(rt.primaryIdx)
 	clear(rt.Schemas)
@@ -1232,9 +1232,9 @@ func (rt *RuleTable) collectParentRoles(scope, role string, parentRoleSet, visit
 	}
 	visited[role] = struct{}{}
 
-	if parentRoles, ok := rt.parentRoles[scope]; ok {
-		if prs, ok := parentRoles[role]; ok {
-			for _, pr := range prs {
+	if parentRoles, ok := rt.ScopeParentRoles[scope]; ok {
+		if prs, ok := parentRoles.RoleParentRoles[role]; ok {
+			for _, pr := range prs.Roles {
 				parentRoleSet[pr] = struct{}{}
 				rt.collectParentRoles(scope, pr, parentRoleSet, visited)
 			}
