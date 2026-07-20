@@ -257,6 +257,45 @@ func TestBuildIndex(t *testing.T) {
 	}
 }
 
+func TestBuildIndexTreatsDefaultAndExplicitOverrideScopePermissionsEqually(t *testing.T) {
+	fsys := toFS(t, &privatev1.IndexBuilderTestCase{Files: map[string]string{
+		"a.yaml": `---
+apiVersion: api.cerbos.dev/v1
+principalPolicy:
+  principal: alice
+  version: default
+  rules:
+    - resource: album
+      actions:
+        - action: view
+          effect: EFFECT_ALLOW
+`,
+		"b.yaml": `---
+apiVersion: api.cerbos.dev/v1
+resourcePolicy:
+  resource: album
+  version: default
+  scopePermissions: SCOPE_PERMISSIONS_OVERRIDE_PARENT
+  rules:
+    - actions: [view]
+      roles: [user]
+      effect: EFFECT_ALLOW
+`,
+		"c.yaml": `---
+apiVersion: api.cerbos.dev/v1
+rolePolicy:
+  role: user
+  version: default
+  rules:
+    - resource: album
+      allowActions: [view]
+`,
+	}})
+
+	_, err := Build(t.Context(), fsys)
+	require.NoError(t, err)
+}
+
 func toFS(t *testing.T, tc *privatev1.IndexBuilderTestCase) fs.FS {
 	t.Helper()
 

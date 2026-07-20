@@ -258,11 +258,15 @@ func (idx *indexBuilder) addPolicy(file string, srcCtx parser.SourceCtx, p polic
 	delete(idx.missingScopes, policyKey)
 	idx.stats.add(p)
 
-	var scopePermission policyv1.ScopePermissions
-	var resourceKind string
+	var (
+		hasScopePermissions bool
+		resourceKind        string
+		scopePermission     policyv1.ScopePermissions
+	)
 	switch p.Kind {
 	case policy.ResourceKind:
 		rp := p.GetResourcePolicy()
+		hasScopePermissions = true
 		scopePermission = rp.ScopePermissions
 		resourceKind = rp.Resource
 		idx.executables[p.ID] = struct{}{}
@@ -283,6 +287,7 @@ func (idx *indexBuilder) addPolicy(file string, srcCtx parser.SourceCtx, p polic
 		}
 
 	case policy.PrincipalKind:
+		hasScopePermissions = true
 		scopePermission = p.GetPrincipalPolicy().ScopePermissions
 		idx.executables[p.ID] = struct{}{}
 
@@ -330,15 +335,16 @@ func (idx *indexBuilder) addPolicy(file string, srcCtx parser.SourceCtx, p polic
 		// not executable
 	}
 
-	sharedScope, ok := idx.sharedScopePermissionGroups[p.Scope]
-	if !ok {
-		sharedScope = make(map[policyv1.ScopePermissions]struct{})
-		idx.sharedScopePermissionGroups[p.Scope] = sharedScope
-	} else if _, ok := idx.conflictingScopes[p.Scope]; !ok {
-		if _, ok := sharedScope[scopePermission]; !ok {
-			sharedScope[scopePermission] = struct{}{}
+	if hasScopePermissions {
+		if scopePermission == policyv1.ScopePermissions_SCOPE_PERMISSIONS_UNSPECIFIED {
+			scopePermission = policyv1.ScopePermissions_SCOPE_PERMISSIONS_OVERRIDE_PARENT
 		}
-
+		sharedScope := idx.sharedScopePermissionGroups[p.Scope]
+		if sharedScope == nil {
+			sharedScope = make(map[policyv1.ScopePermissions]struct{})
+			idx.sharedScopePermissionGroups[p.Scope] = sharedScope
+		}
+		sharedScope[scopePermission] = struct{}{}
 		if len(sharedScope) > 1 {
 			idx.conflictingScopes[p.Scope] = struct{}{}
 		}
